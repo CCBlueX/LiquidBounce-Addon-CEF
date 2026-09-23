@@ -22,6 +22,7 @@
 package net.ccbluex.liquidbounce.mcef.utils;
 
 import com.google.common.base.Suppliers;
+import it.unimi.dsi.fastutil.io.FastBufferedOutputStream;
 import net.ccbluex.liquidbounce.mcef.MultiPartDownloadConfig;
 import net.ccbluex.liquidbounce.mcef.listeners.MCEFProgressListener;
 import net.ccbluex.liquidbounce.mcef.listeners.OkHttpProgressInterceptor;
@@ -34,7 +35,10 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.jspecify.annotations.Nullable;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -155,14 +159,12 @@ public class FileUtils {
             progressListener.onFileStart(task);
 
             TarArchiveEntry entry;
-            // We use [getNextTarEntry] by purpose because Lunar Client is using an outdated version
-            // of Apache Commons Compress
-            while ((entry = tarInput.getNextTarEntry()) != null) {
+            while ((entry = tarInput.getNextEntry()) != null) {
                 if (!entry.isDirectory()) {
                     File outputFile = new File(outputDirectory, entry.getName());
                     outputFile.getParentFile().mkdirs();
 
-                    try (OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(outputFile))) {
+                    try (var outputStream = new FastBufferedOutputStream(new FileOutputStream(outputFile))) {
                         int bytesRead;
                         while ((bytesRead = tarInput.read(buffer)) != -1) {
                             outputStream.write(buffer, 0, bytesRead);
