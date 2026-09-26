@@ -45,7 +45,9 @@ public class MCEFSettings {
             "--autoplay-policy=no-user-gesture-required",
             "--disable-web-security",
             "--enable-widevine-cdm",
-            "--off-screen-rendering-enabled"
+            "--off-screen-rendering-enabled",
+            // Chromium 152+ asks Linux users to accept a EULA on the first run, which fails in the game
+            "--no-first-run"
     ));
     private File cacheDirectory = null;
     private File librariesDirectory = null;
