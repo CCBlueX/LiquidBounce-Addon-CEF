@@ -2,7 +2,6 @@ package net.ccbluex.liquidbounce.cef.backend
 
 import net.ccbluex.liquidbounce.api.core.HttpClient
 import net.ccbluex.liquidbounce.api.interceptors.DefaultHeaderInterceptor
-import net.ccbluex.liquidbounce.cef.CefAccelerationSupport
 import net.ccbluex.liquidbounce.cef.CefRuntime
 import net.ccbluex.liquidbounce.cef.browser.CefBackedBrowser
 import net.ccbluex.liquidbounce.cef.download.CefNativesProgressForwarder
@@ -188,11 +187,7 @@ class CefBrowserBackend : BrowserBackend, EventListener {
             })
         }
 
-        accelerationFlags = when (CefAccelerationSupport.getAccelerationSupport()) {
-            CefAccelerationSupport.Support.UNSUPPORTED -> BrowserAccelerationFlags.UNSUPPORTED
-            CefAccelerationSupport.Support.OPT_IN -> BrowserAccelerationFlags(isSupported = true, isBeta = true)
-            CefAccelerationSupport.Support.DEFAULT -> BrowserAccelerationFlags(isSupported = true, isBeta = false)
-        }
+        AcceleratedPaint.detect()
     }
 
     override fun stop() {

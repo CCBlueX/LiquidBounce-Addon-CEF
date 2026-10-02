@@ -1,6 +1,7 @@
 package net.ccbluex.liquidbounce.cef.browser
 
 import net.ccbluex.liquidbounce.cef.CefRuntime
+import net.ccbluex.liquidbounce.cef.backend.AcceleratedPaint
 import net.ccbluex.liquidbounce.cef.backend.CefBrowserBackend
 import net.ccbluex.liquidbounce.features.module.MinecraftShortcuts
 import net.ccbluex.liquidbounce.integration.backend.BrowserTexture
@@ -54,7 +55,7 @@ class CefBackedBrowser(
             height,
             CefOffscreenBrowserSettings(
                 settings.currentFps,
-                GlobalBrowserSettings.accelerated?.get() == true
+                AcceleratedPaint.isEnabled
             ),
             requestContext
         ).apply {

@@ -1,5 +1,6 @@
 package net.ccbluex.liquidbounce.cef
 
+import net.ccbluex.liquidbounce.cef.backend.AcceleratedPaint
 import net.ccbluex.liquidbounce.cef.backend.CefBrowserBackend
 import net.ccbluex.liquidbounce.cef.error.CefQuickFixes
 import net.ccbluex.liquidbounce.features.addon.LiquidBounceAddon
@@ -23,6 +24,9 @@ class CefAddon : LiquidBounceAddon() {
                 create = ::CefBrowserBackend
             )
         )
+
+        // Its setting has to exist before the global settings load, which happens ahead of the first browser
+        AcceleratedPaint
     }
 
 }
