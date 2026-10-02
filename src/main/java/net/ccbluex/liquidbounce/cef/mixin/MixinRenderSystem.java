@@ -2,8 +2,8 @@ package net.ccbluex.liquidbounce.cef.mixin;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.ccbluex.liquidbounce.integration.backend.BrowserBackendManagerKt;
-import net.ccbluex.liquidbounce.mcef.MCEF;
-import net.ccbluex.liquidbounce.mcef.MCEFAccelerationSupport;
+import net.ccbluex.liquidbounce.cef.CefRuntime;
+import net.ccbluex.liquidbounce.cef.CefAccelerationSupport;
 import net.minecraft.util.TimeSource;
 import org.lwjgl.sdl.SDLHints;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,8 +23,8 @@ public abstract class MixinRenderSystem {
     private static void hookForceEgl(CallbackInfoReturnable<TimeSource.NanoTimeSource> cir) {
         if (!BrowserBackendManagerKt.isBrowserSkipped()
                 && !BrowserBackendManagerKt.isBrowserAccelerationDisabled()
-                && MCEFAccelerationSupport.isX11AcceleratedPaintPossible()) {
-            MCEF.INSTANCE.LOGGER.info("Forcing EGL for accelerated paint");
+                && CefAccelerationSupport.isX11AcceleratedPaintPossible()) {
+            CefRuntime.INSTANCE.LOGGER.info("Forcing EGL for accelerated paint");
             SDLHints.SDL_SetHint(SDLHints.SDL_HINT_VIDEO_FORCE_EGL, "1");
         }
     }

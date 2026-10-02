@@ -11,14 +11,13 @@ import net.ccbluex.liquidbounce.integration.backend.browser.BrowserState
 import net.ccbluex.liquidbounce.integration.backend.browser.BrowserViewport
 import net.ccbluex.liquidbounce.integration.backend.input.InputAcceptor
 import net.ccbluex.liquidbounce.integration.task.TaskManager
-import net.ccbluex.liquidbounce.mcef.MCEF
-import net.ccbluex.liquidbounce.mcef.MCEFAccelerationSupport
 import net.ccbluex.liquidbounce.utils.client.env
 import net.ccbluex.liquidbounce.utils.client.error.ErrorHandler
 import net.ccbluex.liquidbounce.utils.client.logger
 import net.ccbluex.liquidbounce.utils.client.mc
 import net.ccbluex.liquidbounce.utils.kotlin.sortedInsert
 import net.ccbluex.liquidbounce.utils.text.formatAsCapacity
+import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
 import org.cef.handler.CefLifeSpanHandlerAdapter
 import org.cef.handler.CefLoadHandler
@@ -34,7 +33,7 @@ private const val CACHE_CLEANUP_THRESHOLD = 1000 * 60 * 60 * 24 * 7 // 7 days
 /**
  * Uses a modified fork of the JCEF library browser backend made for Minecraft.
  * This browser backend is based on Chromium and is the most advanced browser backend.
- * JCEF is available through the MCEF library, which provides a Minecraft compatible version of JCEF.
+ * JCEF is available through [CefRuntime], which makes it work inside Minecraft.
  *
  * @see <a href="https://github.com/CCBlueX/java-cef/">JCEF</a>
  *
@@ -43,15 +42,15 @@ private const val CACHE_CLEANUP_THRESHOLD = 1000 * 60 * 60 * 24 * 7 // 7 days
 @Suppress("TooManyFunctions")
 class CefBrowserBackend : BrowserBackend, EventListener {
 
-    private val mcefFolder = ConfigSystem.rootFolder.resolve("mcef")
+    private val cefFolder = ConfigSystem.rootFolder.resolve("mcef")
     // The game tests keep it outside the game directory, which they wipe before every run
     private val librariesFolder = env("LB_BROWSER_LIBRARIES", "net.ccbluex.liquidbounce.browser.libraries")
-        ?.let(::File) ?: mcefFolder.resolve("libraries")
-    private val cacheFolder = mcefFolder.resolve("cache")
+        ?.let(::File) ?: cefFolder.resolve("libraries")
+    private val cacheFolder = cefFolder.resolve("cache")
 
     override val isInitialized: Boolean
-        get() = MCEF.INSTANCE.isInitialized
-    override var browsers = mutableListOf<CefBrowser>()
+        get() = CefRuntime.INSTANCE.isInitialized
+    override var browsers = mutableListOf<CefBackedBrowser>()
     override var accelerationFlags = BrowserAccelerationFlags.UNSUPPORTED
 
     @Suppress("ThrowingExceptionsWithoutMessageOrCause")
@@ -59,10 +58,10 @@ class CefBrowserBackend : BrowserBackend, EventListener {
         // Clean up old cache directories
         cleanup()
 
-        if (!MCEF.INSTANCE.isInitialized) {
-            MCEF.INSTANCE.settings.apply {
+        if (!CefRuntime.INSTANCE.isInitialized) {
+            CefRuntime.INSTANCE.settings.apply {
                 userAgent = HttpClient.DEFAULT_AGENT
-                // MCEF reads the status of its range probes itself, the API client would throw on them
+                // The natives download reads the status of its range probes itself, the API client would throw on them
                 okHttpClient = HttpClient.client.newBuilder()
                     .apply { interceptors().removeAll { it !is DefaultHeaderInterceptor } }
                     .build()
@@ -75,9 +74,9 @@ class CefBrowserBackend : BrowserBackend, EventListener {
                 appendCefSwitches("--no-proxy-server")
             }
 
-            val resourceManager = MCEF.INSTANCE.newResourceManager()
+            val resourceManager = CefRuntime.INSTANCE.newResourceManager()
 
-            // Check if system is compatible with MCEF (JCEF)
+            // Check if system is compatible with JCEF
             if (!resourceManager.isSystemCompatible) {
                 throw JcefIsntCompatible()
             }
@@ -85,8 +84,8 @@ class CefBrowserBackend : BrowserBackend, EventListener {
             HashValidator.validateFolder(resourceManager.commitDirectory)
 
             if (resourceManager.requiresDownload()) {
-                taskManager.launch("MCEF") { task ->
-                    resourceManager.registerProgressListener(MCEFProgressForwarder(task))
+                taskManager.launch("CEF") { task ->
+                    resourceManager.registerProgressListener(CefNativesProgressForwarder(task))
 
                     runCatching {
                         resourceManager.downloadJcef()
@@ -139,33 +138,33 @@ class CefBrowserBackend : BrowserBackend, EventListener {
     }
 
     override fun start() {
-        if (!MCEF.INSTANCE.isInitialized) {
-            MCEF.INSTANCE.initialize()
+        if (!CefRuntime.INSTANCE.isInitialized) {
+            CefRuntime.INSTANCE.initialize()
 
-            MCEF.INSTANCE.client.handle.addLifeSpanHandler(object : CefLifeSpanHandlerAdapter() {
-                override fun onAfterCreated(cefBrowser: org.cef.browser.CefBrowser) {
+            CefRuntime.INSTANCE.client.handle.addLifeSpanHandler(object : CefLifeSpanHandlerAdapter() {
+                override fun onAfterCreated(cefBrowser: CefBrowser) {
                     markInitialized(cefBrowser)
                     super.onAfterCreated(cefBrowser)
                 }
             })
 
-            MCEF.INSTANCE.client.addLoadHandler(object : CefLoadHandlerAdapter() {
+            CefRuntime.INSTANCE.client.addLoadHandler(object : CefLoadHandlerAdapter() {
 
                 override fun onLoadStart(
-                    cefBrowser: org.cef.browser.CefBrowser, frame: CefFrame?,
+                    cefBrowser: CefBrowser, frame: CefFrame?,
                     transitionType: CefRequest.TransitionType?
                 ) {
                     updateStateForBrowser(cefBrowser, BrowserState.Loading)
                     super.onLoadStart(cefBrowser, frame, transitionType)
                 }
 
-                override fun onLoadEnd(cefBrowser: org.cef.browser.CefBrowser, frame: CefFrame?, httpStatusCode: Int) {
+                override fun onLoadEnd(cefBrowser: CefBrowser, frame: CefFrame?, httpStatusCode: Int) {
                     updateStateForBrowser(cefBrowser, BrowserState.Success(httpStatusCode))
                     super.onLoadEnd(cefBrowser, frame, httpStatusCode)
                 }
 
                 override fun onLoadError(
-                    cefBrowser: org.cef.browser.CefBrowser, frame: CefFrame?,
+                    cefBrowser: CefBrowser, frame: CefFrame?,
                     errorCode: CefLoadHandler.ErrorCode?, errorText: String?, failedUrl: String?
                 ) {
                     updateStateForBrowser(
@@ -182,7 +181,7 @@ class CefBrowserBackend : BrowserBackend, EventListener {
             })
         }
 
-        val support = MCEFAccelerationSupport.getAccelerationSupport()
+        val support = CefAccelerationSupport.getAccelerationSupport()
         accelerationFlags = if (support.isSupported) {
             BrowserAccelerationFlags(isSupported = true, isBeta = support.isBeta)
         } else {
@@ -191,14 +190,14 @@ class CefBrowserBackend : BrowserBackend, EventListener {
     }
 
     override fun stop() {
-        MCEF.INSTANCE.shutdown()
-        MCEF.INSTANCE.settings.cacheDirectory?.deleteRecursively()
+        CefRuntime.INSTANCE.shutdown()
+        CefRuntime.INSTANCE.settings.cacheDirectory?.deleteRecursively()
     }
 
     override fun update() {
-        if (MCEF.INSTANCE.isInitialized) {
+        if (CefRuntime.INSTANCE.isInitialized) {
             try {
-                MCEF.INSTANCE.app.handle.N_DoMessageLoopWork()
+                CefRuntime.INSTANCE.app.handle.N_DoMessageLoopWork()
             } catch (e: Exception) {
                 logger.error("Failed to draw browser globally", e)
             }
@@ -214,20 +213,20 @@ class CefBrowserBackend : BrowserBackend, EventListener {
         priority: Short,
         incognito: Boolean,
         inputAcceptor: InputAcceptor?
-    ) = CefBrowser(this, url, position, settings, priority, incognito, inputAcceptor)
+    ) = CefBackedBrowser(this, url, position, settings, priority, incognito, inputAcceptor)
         .apply(::addBrowser)
 
-    private fun addBrowser(browser: CefBrowser) {
-        browsers.sortedInsert(browser, CefBrowser::priority)
+    private fun addBrowser(browser: CefBackedBrowser) {
+        browsers.sortedInsert(browser, CefBackedBrowser::priority)
     }
 
-    internal fun removeBrowser(browser: CefBrowser) {
+    internal fun removeBrowser(browser: CefBackedBrowser) {
         browsers.remove(browser)
     }
 
-    fun getBrowserByApi(apiInstance: org.cef.browser.CefBrowser) = browsers.find { it.browserApi == apiInstance }
+    fun getBrowserByApi(apiInstance: CefBrowser) = browsers.find { it.browserApi == apiInstance }
 
-    private fun markInitialized(apiInstance: org.cef.browser.CefBrowser) {
+    private fun markInitialized(apiInstance: CefBrowser) {
         val browser = getBrowserByApi(apiInstance)
         if (browser != null) {
             if (!browser.isInitialized) {
@@ -238,7 +237,7 @@ class CefBrowserBackend : BrowserBackend, EventListener {
         }
     }
 
-    private fun updateStateForBrowser(apiInstance: org.cef.browser.CefBrowser, state: BrowserState) {
+    private fun updateStateForBrowser(apiInstance: CefBrowser, state: BrowserState) {
         val browser = getBrowserByApi(apiInstance)
         if (browser != null) {
             browser.state = state
