@@ -22,13 +22,19 @@
 package net.ccbluex.liquidbounce.mcef;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import java.nio.IntBuffer;
 import java.util.Locale;
 
 import net.ccbluex.liquidbounce.mcef.utils.EglUtils;
+import net.minecraft.util.Util;
+import org.lwjgl.egl.EGL;
 import org.lwjgl.egl.EGL14;
+import org.lwjgl.egl.KHRPlatformX11;
 import org.lwjgl.opengl.CGL;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.system.JNI;
+import org.lwjgl.system.MemoryUtil;
 
 /**
  * Check if the current platform supports GPU acceleration for CEF.
@@ -117,9 +123,7 @@ public final class MCEFAccelerationSupport {
         try {
             RenderSystem.assertOnRenderThread();
 
-            // Check if WEBKIT_DISABLE_DMABUF_RENDERER=1 is set.
-            var webkitDisableDmabufRenderer = System.getenv("WEBKIT_DISABLE_DMABUF_RENDERER");
-            if (webkitDisableDmabufRenderer != null && webkitDisableDmabufRenderer.equals("1")) {
+            if (isDmabufRendererDisabled()) {
                 MCEF.INSTANCE.LOGGER.warn("WEBKIT_DISABLE_DMABUF_RENDERER=1 is set.");
                 return Support.UNSUPPORTED;
             }
@@ -154,6 +158,50 @@ public final class MCEFAccelerationSupport {
             MCEF.INSTANCE.LOGGER.warn("Failed to check Linux GPU acceleration support: {}", e.getMessage());
             return Support.UNSUPPORTED;
         }
+    }
+
+    /**
+     * Accelerated paint imports dmabufs through EGL, so on X11 the game's GL context has to be an EGL one.
+     * This decides it before that context exists, against a display of its own on the same X server.
+     */
+    public static boolean isX11AcceleratedPaintPossible() {
+        if (Util.getPlatform() != Util.OS.LINUX || isDmabufRendererDisabled()) {
+            return false;
+        }
+
+        try {
+            try {
+                EGL.getCapabilities();
+            } catch (IllegalStateException ignored) {
+                EGL.create();
+            }
+
+            var getPlatformDisplay = EGL.getCapabilities().eglGetPlatformDisplay;
+            if (getPlatformDisplay == MemoryUtil.NULL) {
+                return false;
+            }
+
+            // LWJGL refuses EGL_DEFAULT_DISPLAY, with which EGL opens the default X display itself
+            long display = JNI.callPPP(KHRPlatformX11.EGL_PLATFORM_X11_KHR, EGL14.EGL_DEFAULT_DISPLAY,
+                    MemoryUtil.NULL, getPlatformDisplay);
+            if (display == EGL14.EGL_NO_DISPLAY || !EGL14.eglInitialize(display, (IntBuffer) null, null)) {
+                return false;
+            }
+
+            try {
+                var capabilities = EGL.createDisplayCapabilities(display);
+                return capabilities.EGL_EXT_image_dma_buf_import && capabilities.EGL_KHR_image_base;
+            } finally {
+                EGL14.eglTerminate(display);
+            }
+        } catch (Throwable e) {
+            MCEF.INSTANCE.LOGGER.warn("Failed to check X11 accelerated paint support: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private static boolean isDmabufRendererDisabled() {
+        return "1".equals(System.getenv("WEBKIT_DISABLE_DMABUF_RENDERER"));
     }
 
     private static Support checkMacOSSupport() {
