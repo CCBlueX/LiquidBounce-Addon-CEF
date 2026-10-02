@@ -21,12 +21,14 @@
 
 package net.ccbluex.liquidbounce.mcef.cef;
 
+import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.ccbluex.liquidbounce.mcef.MCEF;
 import net.ccbluex.liquidbounce.mcef.MCEFPlatform;
 import net.ccbluex.liquidbounce.mcef.cursor.MCEFCursorHelper;
 import net.ccbluex.liquidbounce.mcef.listeners.MCEFCursorChangeListener;
 import net.minecraft.client.input.InputQuirks;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.resources.Identifier;
 import org.cef.browser.CefBrowser;
 import org.cef.browser.CefBrowserOsr;
@@ -38,11 +40,14 @@ import org.cef.event.CefMouseWheelEvent;
 import org.cef.handler.CefAcceleratedPaintInfo;
 import org.cef.misc.CefCursorType;
 import org.jspecify.annotations.Nullable;
+import org.lwjgl.sdl.SDLClipboard;
 import org.lwjgl.sdl.SDLKeycode;
+import org.lwjgl.sdl.SDLVideo;
 import org.lwjgl.system.MemoryUtil;
 
 import java.awt.*;
 import java.nio.ByteBuffer;
+import java.util.UUID;
 
 import static net.ccbluex.liquidbounce.mcef.MCEF.mc;
 
@@ -89,6 +94,54 @@ public class MCEFBrowser extends CefBrowserOsr {
 
     private final boolean isMacOs = MCEFPlatform.getPlatform().isMacOS();
     private final boolean isWindows = MCEFPlatform.getPlatform().isWindows();
+    private final boolean isWayland = "wayland".equals(SDLVideo.SDL_GetCurrentVideoDriver());
+
+    /**
+     * Sent in front of the copied text, so that only the copy script MCEF just ran can write the clipboard.
+     */
+    private @Nullable String clipboardToken;
+
+    /**
+     * Hands what a copy or cut would put on the clipboard to the {@code mcefClipboard} query.
+     */
+    private static final String COPY_SCRIPT = """
+            ((cut, token) => {
+                const element = document.activeElement;
+                const field = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
+                    ? element : null;
+                if (field?.type === 'password') {
+                    return;
+                }
+
+                const data = new DataTransfer();
+                const event = new ClipboardEvent(cut ? 'cut' : 'copy',
+                    {clipboardData: data, bubbles: true, cancelable: true});
+                let text;
+                if (!element.dispatchEvent(event)) {
+                    text = data.getData('text/plain');
+                } else {
+                    text = field && field.selectionStart !== null
+                        ? field.value.slice(field.selectionStart, field.selectionEnd)
+                        : getSelection().toString();
+                    if (cut && text && (field || element.isContentEditable)) {
+                        document.execCommand('delete');
+                    }
+                }
+
+                if (text) {
+                    mcefClipboard({request: token + text});
+                }
+            })(%s, %s)""";
+
+    private static final String PASTE_SCRIPT = """
+            (text => {
+                const data = new DataTransfer();
+                data.setData('text/plain', text);
+                const event = new ClipboardEvent('paste', {clipboardData: data, bubbles: true, cancelable: true});
+                if (document.activeElement.dispatchEvent(event)) {
+                    document.execCommand('insertText', false, text);
+                }
+            })(%s)""";
 
     public MCEFBrowser(MCEFClient client, String url, boolean transparent, MCEFBrowserSettings browserSettings) {
         this(client, url, transparent, browserSettings, null);
@@ -297,7 +350,50 @@ public class MCEFBrowser extends CefBrowserOsr {
             return;
         }
 
+        if (handleClipboardShortcut(new KeyEvent(scancode, keycode, modifiers))) {
+            return;
+        }
+
         sendKeyEvent(createKeyEvent(CefKeyEvent.KEY_PRESS, scancode, keycode, modifiers));
+    }
+
+    private boolean handleClipboardShortcut(KeyEvent event) {
+        // Chromium runs on X11, and KWin only hands the Wayland clipboard to X11 clients while one of
+        // their windows is focused. Copies go through SDL as well: reading Chromium's own selection back
+        // would block this thread, which Chromium answers on, until SDL gives up after seconds.
+        if (isWayland) {
+            if (event.isCopy() || event.isCut()) {
+                clipboardToken = UUID.randomUUID().toString();
+                executeInFocusedFrame(COPY_SCRIPT.formatted(event.isCut(), new JsonPrimitive(clipboardToken)));
+                return true;
+            }
+
+            if (event.isPaste()) {
+                var text = SDLClipboard.SDL_HasClipboardText() ? SDLClipboard.SDL_GetClipboardText() : null;
+                if (text != null && !text.isEmpty()) {
+                    executeInFocusedFrame(PASTE_SCRIPT.formatted(new JsonPrimitive(text)));
+                }
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    boolean writeClipboard(String request) {
+        var token = clipboardToken;
+        if (token == null || !request.startsWith(token)) {
+            return false;
+        }
+
+        clipboardToken = null;
+        SDLClipboard.SDL_SetClipboardText(request.substring(token.length()));
+        return true;
+    }
+
+    private void executeInFocusedFrame(String script) {
+        var frame = getFocusedFrame();
+        frame.executeJavaScript(script, frame.getURL(), 0);
     }
 
     /**

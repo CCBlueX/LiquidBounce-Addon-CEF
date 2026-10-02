@@ -25,11 +25,14 @@ import org.cef.CefClient;
 import org.cef.CefSettings;
 import org.cef.browser.CefBrowser;
 import org.cef.browser.CefFrame;
+import org.cef.browser.CefMessageRouter;
 import org.cef.callback.CefContextMenuParams;
 import org.cef.callback.CefMenuModel;
+import org.cef.callback.CefQueryCallback;
 import org.cef.handler.CefContextMenuHandler;
 import org.cef.handler.CefDisplayHandler;
 import org.cef.handler.CefLoadHandler;
+import org.cef.handler.CefMessageRouterHandlerAdapter;
 import org.cef.network.CefRequest;
 
 import java.util.ArrayList;
@@ -49,6 +52,21 @@ public class MCEFClient implements CefLoadHandler, CefContextMenuHandler, CefDis
         cefClient.addLoadHandler(this);
         cefClient.addContextMenuHandler(this);
         cefClient.addDisplayHandler(this);
+
+        var clipboardRouter = CefMessageRouter.create(
+                new CefMessageRouter.CefMessageRouterConfig("mcefClipboard", "mcefClipboardCancel"));
+        clipboardRouter.addHandler(new CefMessageRouterHandlerAdapter() {
+            @Override
+            public boolean onQuery(CefBrowser browser, CefFrame frame, long queryId, String request,
+                                   boolean persistent, CefQueryCallback callback) {
+                if (browser instanceof MCEFBrowser mcefBrowser && mcefBrowser.writeClipboard(request)) {
+                    callback.success("");
+                    return true;
+                }
+                return false;
+            }
+        }, true);
+        cefClient.addMessageRouter(clipboardRouter);
     }
 
     public CefClient getHandle() {
