@@ -112,6 +112,7 @@ final class MultiPartDownloader {
         var futures = new ArrayList<Future<?>>(parts.length);
 
         try (var executor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("CEF Downloader ", 0).factory())) {
+            // TODO: change to StructuredScope after it's stable
             var completionService = new ExecutorCompletionService<Void>(executor);
 
             try (var file = new RandomAccessFile(tempFile.toFile(), "rw");

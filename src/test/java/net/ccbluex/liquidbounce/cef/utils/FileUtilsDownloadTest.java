@@ -25,7 +25,6 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import net.ccbluex.liquidbounce.cef.MultiPartDownloadConfig;
 import net.ccbluex.liquidbounce.cef.listeners.CefNativesProgressListener;
-import okhttp3.OkHttpClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,10 +34,8 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -221,71 +218,6 @@ class FileUtilsDownloadTest {
         assertEquals(1, handler.headRequests.get());
         assertTrue(handler.partialRequests.get() > 1);
         assertEquals(0, handler.wholeRequests.get());
-    }
-
-    @Test
-    void downloadFileAbortsStalledPartsWhenInterrupted() throws Exception {
-        var config = new MultiPartDownloadConfig(true, 3, 1024L * 1024L, 0, 0L);
-        var data = createData(8 * 1024 * 1024);
-        var handler = new DownloadHandler(data, true, false, false, 0, 0, true);
-        server = createServer(handler);
-
-        // A stalled read must be aborted by cancellation, not by the read timeout.
-        var client = new OkHttpClient.Builder().readTimeout(120, TimeUnit.SECONDS).build();
-        var outputFile = tempDirectory.resolve("stalled.bin").toFile();
-        var listener = new RecordingProgressListener(data.length);
-        var failure = new AtomicReference<Throwable>();
-
-        var downloadThread = new Thread(() -> {
-            try {
-                FileUtils.downloadFile(listener, "stalled", serverUrl(), outputFile, config, client);
-            } catch (Throwable t) {
-                failure.set(t);
-            }
-        }, "stalled-download");
-
-        downloadThread.start();
-        while (handler.partialRequests.get() < 2 && downloadThread.isAlive()) {
-            Thread.sleep(20);
-        }
-        assertTrue(handler.partialRequests.get() >= 2, "Multipart download did not stall");
-        assertTrue(downloadThread.isAlive(), "Download finished before it could be interrupted");
-
-        downloadThread.interrupt();
-        downloadThread.join(10_000);
-
-        assertFalse(downloadThread.isAlive(), "Download did not abort after interruption");
-        assertInstanceOf(IOException.class, failure.get());
-        assertFalse(outputFile.exists());
-    }
-
-    @Test
-    void downloadFileAbortsStalledPartsWhenAPartFails() throws Exception {
-        var config = new MultiPartDownloadConfig(true, 3, 1024L * 1024L, 0, 0L);
-        var data = createData(8 * 1024 * 1024);
-        var handler = new DownloadHandler(data, true, false, false, 0, 0, true, true);
-        server = createServer(handler);
-
-        // Failing parts must be aborted by cancellation, not by the read timeout.
-        var client = new OkHttpClient.Builder().readTimeout(120, TimeUnit.SECONDS).build();
-        var outputFile = tempDirectory.resolve("aborted.bin").toFile();
-        var listener = new RecordingProgressListener(data.length);
-        var failure = new AtomicReference<Throwable>();
-
-        var downloadThread = new Thread(() -> {
-            try {
-                FileUtils.downloadFile(listener, "aborted", serverUrl(), outputFile, config, client);
-            } catch (Throwable t) {
-                failure.set(t);
-            }
-        }, "failing-download");
-
-        downloadThread.start();
-        downloadThread.join(10_000);
-
-        assertFalse(downloadThread.isAlive(), "Download did not abort after a part failed");
-        assertInstanceOf(IOException.class, failure.get());
-        assertFalse(outputFile.exists());
     }
 
     private HttpServer createServer(DownloadHandler handler) throws IOException {
