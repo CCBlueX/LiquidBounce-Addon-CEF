@@ -1,0 +1,84 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Setting up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Build
+        run: ./gradlew build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: addon
+          path: build/libs/*.jar
+
+      # LiquidBounce bundles the add-on from the CCBlueX Maven
+      - name: Publish snapshot
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          MAVEN_TOKEN_NAME: ${{ secrets.MAVEN_TOKEN_NAME }}
+          MAVEN_TOKEN_SECRET: ${{ secrets.MAVEN_TOKEN_SECRET }}
+        run: ./gradlew publish -Psnapshot
+
+      - name: Publish release
+        if: github.event_name == 'release'
+        env:
+          MAVEN_TOKEN_NAME: ${{ secrets.MAVEN_TOKEN_NAME }}
+          MAVEN_TOKEN_SECRET: ${{ secrets.MAVEN_TOKEN_SECRET }}
+        run: ./gradlew publish
+
+  gametest:
+    runs-on: ubuntu-latest
+    # A client that fails to start or hangs must not hold the runner for hours
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Setting up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      # The game renders through Mesa's EGL, and the client's browser probes EGL as well.
+      - name: Install Xvfb and EGL
+        run: sudo apt-get update && sudo apt-get install -y xvfb libegl1 libegl-mesa0
+      - name: Run game tests
+        env:
+          # Minecraft asks for an sRGB framebuffer, which Xvfb's GLX does not offer
+          SDL_VIDEO_FORCE_EGL: 1
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" ./gradlew runClientGameTest
+
+      - name: Upload game test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gametest
+          path: |
+            build/run/clientGameTest/screenshots/
+            build/run/clientGameTest/logs/latest.log
+          if-no-files-found: ignore

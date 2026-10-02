@@ -1,18 +1,37 @@
 {
   "schemaVersion": 1,
-  "id": "${mod_id}",
-  "version": "${mod_version}",
-  "name": "${mod_name}",
-  "description": "A Minecraft mod and library for adding the Chromium web browser into the game (Minecraft Chromium Embedded Framework).",
+  "id": "liquidbounce-cef",
+  "version": "${version}",
+  "name": "LiquidBounce CEF",
+  "description": "Shows the client's menus with Chromium, through the Chromium Embedded Framework. LiquidBounce comes with it.",
   "authors": [
-    "${mod_vendor}"
+    "CCBlueX"
   ],
-  "license": "LGPL 2.1",
-  "icon": "icon.png",
-  "environment": "*",
-  "mixins": [],
+  "contact": {
+    "homepage": "https://liquidbounce.net/",
+    "sources": "https://github.com/CCBlueX/LiquidBounce-Addon-CEF",
+    "issues": "https://github.com/CCBlueX/LiquidBounce-Addon-CEF/issues"
+  },
+  "license": "LGPL-2.1-or-later",
+  "environment": "client",
+  "entrypoints": {
+    "liquidbounce": [
+      "net.ccbluex.liquidbounce.cef.CefAddon"
+    ]
+  },
+  "accessWidener": "liquidbounce-cef.accesswidener",
   "depends": {
+    "minecraft": "~${minecraft_version}",
     "fabricloader": ">=${loader_version}",
-    "minecraft": ["${minecraft_version}"]
+    "fabric-language-kotlin": ">=${fabric_kotlin_version}",
+    "liquidbounce": "*"
+  },
+  "custom": {
+    "liquidbounce": {
+      "color": "#4285F4"
+    },
+    "modmenu": {
+      "parent": "liquidbounce"
+    }
   }
 }

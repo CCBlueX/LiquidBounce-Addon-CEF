@@ -1,46 +1,25 @@
-<p align="center">
-  <img src="https://github.com/CinemaMod/mcef/assets/30220598/938896d7-2589-49df-8f82-29266c64dfb7" alt="MCEF Logo" style="width:66px;height:66px;">
-</p>
+# LiquidBounce CEF
 
-# MCEF (Minecraft Chromium Embedded Framework for LiquidBounce)
+The [LiquidBounce](https://github.com/CCBlueX/LiquidBounce) add-on that shows the client's menus with Chromium, through
+the [Chromium Embedded Framework](https://bitbucket.org/chromiumembedded/cef). LiquidBounce comes with it, it is not
+installed on its own. [Wry](https://github.com/CCBlueX/LiquidBounce-Addon-Wry) and
+[Ultralight](https://github.com/CCBlueX/LiquidBounce-Addon-Ultralight) are the alternatives.
 
-A lightweight fork of MCEF designed specifically for integration with LiquidBounce. This barebone library provides essential Chromium web browser functionality for Minecraft.
+It is a fork of [MCEF](https://github.com/CinemaMod/mcef) and uses [our fork of java-cef](https://github.com/CCBlueX/java-cef).
+On the first start it downloads the java-cef natives built from the commit in [`java-cef`](java-cef) from the
+LiquidBounce API. Chromium runs on Windows 10 and 11, macOS 10.15 and later, and Linux, on x86-64 and ARM64.
 
-MCEF is based on java-cef (Java Chromium Embedded Framework), which is based on CEF (Chromium Embedded Framework), which is based on Chromium. Originally created by montoyo and rewritten by the CinemaMod Group, this version has been streamlined for LiquidBounce integration.
+## Building
 
-The library includes a downloader system for retrieving the necessary java-cef & CEF binaries required by the Chromium browser. This requires a connection to https://api.liquidbounce.net/, as well as Cloudflare Storage.
-
-Current Chromium version: `122.0.6261.112`
-
-## Supported Platforms
-- Windows 10/11 (x86_64, arm64)*
-- macOS 11 or greater (Intel, Apple Silicon)
-- GNU Linux glibc 2.31 or greater (x86_64, arm64)**
-
-*Note: Some antivirus software may prevent MCEF from initializing. You may need to disable your antivirus or whitelist the mod files for proper functionality.
-
-**This library will not work on Android.
-
-## For Modders
-MCEF is LGPL, as long as your project doesn't modify or include MCEF source code, you can choose a different license. See the full license in the LICENSE file.
-
-### Using MCEF in Your Project
-```gradle
-repositories {
-    maven { url 'https://jitpack.io' }
-}
 ```
-```gradle
-dependencies {
-    modImplementation 'com.github.CCBlueX:mcef:3.1.0-1.21.4'
-}
+git submodule update --init
+./gradlew build
 ```
 
-### Building & Modifying MCEF
-After cloning this repo, you will need to clone the java-cef git submodule using the provided gradle task: `./gradlew cloneJcef`.
+`./gradlew runClientGameTest` starts the client with the add-on and checks that it shows the client's pages.
+`PROVIDED_JCEF_PATH=<dir>` loads the natives of a java-cef build of your own instead of downloading them.
 
-## Fork Hierarchy
-- [CCBlueX/mcef](https://github.com/CCBlueX/mcef) - Current LiquidBounce-optimized version
-- [CinemaMod/mcef](https://github.com/CinemaMod/mcef)
-- [montoyo/mcef](https://github.com/montoyo/mcef)
+## License
 
+The add-on is licensed under the LGPL 2.1 or later, see [LICENSE](LICENSE). MCEF is by montoyo and the CinemaMod
+Group, java-cef and CEF are under the BSD license.
