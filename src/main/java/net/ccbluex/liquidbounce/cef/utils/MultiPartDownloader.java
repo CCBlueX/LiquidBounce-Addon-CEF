@@ -22,11 +22,8 @@ package net.ccbluex.liquidbounce.cef.utils;
 
 import net.ccbluex.liquidbounce.cef.MultiPartDownloadConfig;
 import net.ccbluex.liquidbounce.cef.listeners.CefNativesProgressListener;
-import okhttp3.HttpUrl;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
-import okio.BufferedSource;
+import net.ccbluex.liquidbounce.utils.io.PathExtKt;
+import okhttp3.*;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,13 +31,13 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLongArray;
 
@@ -64,6 +61,7 @@ final class MultiPartDownloader {
 
     private final OkHttpClient client;
     private final MultiPartDownloadConfig config;
+    private final Set<Call> activeCalls = ConcurrentHashMap.newKeySet();
 
     MultiPartDownloader(OkHttpClient client, MultiPartDownloadConfig config) {
         this.client = client;
@@ -124,32 +122,31 @@ final class MultiPartDownloader {
                     futures.add(completionService.submit(new PartDownload(part, reporter, url, channel, metadata.contentLength())));
                 }
 
-                waitForParts(futures, completionService);
+                waitForParts(completionService, parts.length);
                 reporter.finish();
             }
 
-            Files.move(tempFile, outputFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            PathExtKt.atomicMoveTo(tempFile, outputFile.toPath());
             progressListener.onFileEnd(task);
             logInfo("Finished multipart download for task '{}': contentLength={}, parts={}",
                     task, metadata.contentLength(), parts.length);
             return true;
         } catch (IOException e) {
-            cancel(futures);
             Files.deleteIfExists(tempFile);
             logInfo("Multipart download failed for task '{}': {}", task, e.getMessage());
             throw e;
         } catch (InterruptedException e) {
-            cancel(futures);
             Thread.currentThread().interrupt();
             Files.deleteIfExists(tempFile);
             logInfo("Multipart download interrupted for task '{}'", task);
             throw new IOException("Interrupted while downloading " + url, e);
         } catch (ExecutionException e) {
-            cancel(futures);
             Files.deleteIfExists(tempFile);
             var unwrapped = unwrap(url, e);
             logInfo("Multipart download failed for task '{}': {}", task, unwrapped.getMessage());
             throw unwrapped;
+        } finally {
+            cancel(futures);
         }
     }
 
@@ -202,14 +199,7 @@ final class MultiPartDownloader {
                 return null;
             }
 
-            var contentLength = parseLongHeader(response, CONTENT_LENGTH);
-            if (contentLength != null) {
-                return contentLength;
-            }
-
-            var body = response.body();
-            var bodyLength = body.contentLength();
-            return bodyLength > 0 ? bodyLength : null;
+            return parseLongHeader(response, CONTENT_LENGTH);
         }
     }
 
@@ -276,21 +266,19 @@ final class MultiPartDownloader {
         return (int) Math.min(config.maxConcurrency(), contentLength / config.minPartSizeBytes());
     }
 
-    private void waitForParts(List<Future<?>> futures, CompletionService<Void> completionService)
+    private void waitForParts(CompletionService<Void> completionService, int partCount)
             throws InterruptedException, ExecutionException {
-        for (int remaining = futures.size(); remaining > 0; remaining--) {
-            try {
-                completionService.take().get();
-            } catch (InterruptedException | ExecutionException e) {
-                cancel(futures);
-                throw e;
-            }
+        for (int remaining = partCount; remaining > 0; remaining--) {
+            completionService.take().get();
         }
     }
 
     private void cancel(List<Future<?>> futures) {
         for (var future : futures) {
             future.cancel(true);
+        }
+        for (var call : activeCalls) {
+            call.cancel();
         }
     }
 
@@ -394,6 +382,10 @@ final class MultiPartDownloader {
                 try {
                     confirmedBytes += downloadRange(rangeStart, part.end(), confirmedBytes);
                 } catch (RetryablePartDownloadException e) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        throw new IOException("Part download interrupted", e);
+                    }
+
                     confirmedBytes += e.bytesRead();
                     reporter.update(part.index(), confirmedBytes, false);
 
@@ -425,23 +417,31 @@ final class MultiPartDownloader {
                     .get()
                     .build();
 
-            try (var response = executeRequest(request)) {
-                if (response.code() != HTTP_PARTIAL_CONTENT) {
-                    throw new IOException(String.format(Locale.ROOT,
-                            "Part download failed: range=%d-%d, HTTP Status=%d %s",
-                            rangeStart, rangeEnd, response.code(), response.message()));
-                }
-                validateContentRange(response, rangeStart, rangeEnd);
+            var call = client.newCall(request);
+            activeCalls.add(call);
 
-                try (var source = response.body().source()) {
-                    return copyPart(source, channel, rangeStart, confirmedBytesBeforeRange, rangeEnd - rangeStart + 1L);
+            try {
+                try (var response = execute(call)) {
+                    if (response.code() != HTTP_PARTIAL_CONTENT) {
+                        throw new IOException(String.format(Locale.ROOT,
+                                "Part download failed: range=%d-%d, HTTP Status=%d %s",
+                                rangeStart, rangeEnd, response.code(), response.message()));
+                    }
+                    validateContentRange(response, rangeStart, rangeEnd);
+
+                    try (var source = response.body().source()) {
+                        return copyPart(source, channel, rangeStart, confirmedBytesBeforeRange,
+                                rangeEnd - rangeStart + 1L);
+                    }
                 }
+            } finally {
+                activeCalls.remove(call);
             }
         }
 
-        private Response executeRequest(Request request) throws IOException {
+        private Response execute(Call call) throws IOException {
             try {
-                return client.newCall(request).execute();
+                return call.execute();
             } catch (IOException e) {
                 throw new RetryablePartDownloadException(0L, e);
             }
@@ -459,63 +459,31 @@ final class MultiPartDownloader {
             }
         }
 
-        private long copyPart(BufferedSource source, FileChannel channel, long rangeStart, long confirmedBytesBeforeRange,
-                              long expectedLength) throws IOException {
-            var buffer = new byte[COPY_BUFFER_SIZE];
+        private long copyPart(ReadableByteChannel source, FileChannel channel, long rangeStart,
+                              long confirmedBytesBeforeRange, long expectedLength) throws IOException {
             long bytesRead = 0L;
-            int read;
 
-            while ((read = readChunkOrRetry(source, buffer, bytesRead)) != -1) {
-                if (Thread.currentThread().isInterrupted()) {
-                    throw new IOException("Part download interrupted");
+            while (bytesRead < expectedLength) {
+                long transferred;
+                try {
+                    transferred = channel.transferFrom(source, rangeStart + bytesRead,
+                            Math.min(COPY_BUFFER_SIZE, expectedLength - bytesRead));
+                } catch (IOException e) {
+                    throw new RetryablePartDownloadException(bytesRead, e);
                 }
 
-                writeFully(channel, buffer, read, rangeStart + bytesRead);
-                bytesRead += read;
-                reporter.update(part.index(), confirmedBytesBeforeRange + bytesRead, false);
-            }
+                if (transferred == 0L) {
+                    throw new RetryablePartDownloadException(bytesRead, new IOException(String.format(Locale.ROOT,
+                            "Part length mismatch: range=%d-%d, expected=%d, actual=%d",
+                            rangeStart, rangeStart + expectedLength - 1L, expectedLength, bytesRead)));
+                }
 
-            if (bytesRead != expectedLength) {
-                throw new RetryablePartDownloadException(bytesRead, new IOException(String.format(Locale.ROOT,
-                        "Part length mismatch: range=%d-%d, expected=%d, actual=%d",
-                        rangeStart, rangeStart + expectedLength - 1L, expectedLength, bytesRead)));
+                bytesRead += transferred;
+                reporter.update(part.index(), confirmedBytesBeforeRange + bytesRead, false);
             }
 
             reporter.update(part.index(), confirmedBytesBeforeRange + bytesRead, true);
             return bytesRead;
-        }
-
-        private int readChunkOrRetry(BufferedSource source, byte[] buffer, long bytesRead) throws IOException {
-            try {
-                return readChunk(source, buffer);
-            } catch (IOException e) {
-                throw new RetryablePartDownloadException(bytesRead, e);
-            }
-        }
-
-        private int readChunk(BufferedSource source, byte[] buffer) throws IOException {
-            int offset = 0;
-            while (offset < buffer.length) {
-                if (Thread.currentThread().isInterrupted()) {
-                    throw new IOException("Part download interrupted");
-                }
-
-                var read = source.read(buffer, offset, buffer.length - offset);
-                if (read == -1) {
-                    return offset == 0 ? -1 : offset;
-                }
-
-                offset += read;
-            }
-
-            return offset;
-        }
-
-        private void writeFully(FileChannel channel, byte[] buffer, int length, long position) throws IOException {
-            var byteBuffer = ByteBuffer.wrap(buffer, 0, length);
-            while (byteBuffer.hasRemaining()) {
-                position += channel.write(byteBuffer, position);
-            }
         }
 
         private void sleepBeforeRetry() throws IOException {

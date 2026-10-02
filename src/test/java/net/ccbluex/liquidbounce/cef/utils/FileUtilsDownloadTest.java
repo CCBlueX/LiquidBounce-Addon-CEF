@@ -25,6 +25,7 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import net.ccbluex.liquidbounce.cef.MultiPartDownloadConfig;
 import net.ccbluex.liquidbounce.cef.listeners.CefNativesProgressListener;
+import okhttp3.OkHttpClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -34,14 +35,18 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class FileUtilsDownloadTest {
 
     private static final int MULTI_PART_THRESHOLD = 32 * 1024 * 1024;
+    private static final int STALL_AFTER_BYTES = 4096;
+    private static final long STALL_MILLIS = 30_000L;
 
     @TempDir
     private Path tempDirectory;
@@ -218,6 +223,71 @@ class FileUtilsDownloadTest {
         assertEquals(0, handler.wholeRequests.get());
     }
 
+    @Test
+    void downloadFileAbortsStalledPartsWhenInterrupted() throws Exception {
+        var config = new MultiPartDownloadConfig(true, 3, 1024L * 1024L, 0, 0L);
+        var data = createData(8 * 1024 * 1024);
+        var handler = new DownloadHandler(data, true, false, false, 0, 0, true);
+        server = createServer(handler);
+
+        // A stalled read must be aborted by cancellation, not by the read timeout.
+        var client = new OkHttpClient.Builder().readTimeout(120, TimeUnit.SECONDS).build();
+        var outputFile = tempDirectory.resolve("stalled.bin").toFile();
+        var listener = new RecordingProgressListener(data.length);
+        var failure = new AtomicReference<Throwable>();
+
+        var downloadThread = new Thread(() -> {
+            try {
+                FileUtils.downloadFile(listener, "stalled", serverUrl(), outputFile, config, client);
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, "stalled-download");
+
+        downloadThread.start();
+        while (handler.partialRequests.get() < 2 && downloadThread.isAlive()) {
+            Thread.sleep(20);
+        }
+        assertTrue(handler.partialRequests.get() >= 2, "Multipart download did not stall");
+        assertTrue(downloadThread.isAlive(), "Download finished before it could be interrupted");
+
+        downloadThread.interrupt();
+        downloadThread.join(10_000);
+
+        assertFalse(downloadThread.isAlive(), "Download did not abort after interruption");
+        assertInstanceOf(IOException.class, failure.get());
+        assertFalse(outputFile.exists());
+    }
+
+    @Test
+    void downloadFileAbortsStalledPartsWhenAPartFails() throws Exception {
+        var config = new MultiPartDownloadConfig(true, 3, 1024L * 1024L, 0, 0L);
+        var data = createData(8 * 1024 * 1024);
+        var handler = new DownloadHandler(data, true, false, false, 0, 0, true, true);
+        server = createServer(handler);
+
+        // Failing parts must be aborted by cancellation, not by the read timeout.
+        var client = new OkHttpClient.Builder().readTimeout(120, TimeUnit.SECONDS).build();
+        var outputFile = tempDirectory.resolve("aborted.bin").toFile();
+        var listener = new RecordingProgressListener(data.length);
+        var failure = new AtomicReference<Throwable>();
+
+        var downloadThread = new Thread(() -> {
+            try {
+                FileUtils.downloadFile(listener, "aborted", serverUrl(), outputFile, config, client);
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, "failing-download");
+
+        downloadThread.start();
+        downloadThread.join(10_000);
+
+        assertFalse(downloadThread.isAlive(), "Download did not abort after a part failed");
+        assertInstanceOf(IOException.class, failure.get());
+        assertFalse(outputFile.exists());
+    }
+
     private HttpServer createServer(DownloadHandler handler) throws IOException {
         var httpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         httpServer.createContext("/file", handler);
@@ -245,6 +315,9 @@ class FileUtilsDownloadTest {
         private final boolean failHeadRequest;
         private final int transientPartialFailureLimit;
         private final int transientPartialFailureBytes;
+        private final boolean stallPartialRequests;
+        private final boolean failFirstRangeRequest;
+        private final AtomicInteger stalledRequests = new AtomicInteger();
         private final AtomicInteger headRequests = new AtomicInteger();
         private final AtomicInteger partialRequests = new AtomicInteger();
         private final AtomicInteger wholeRequests = new AtomicInteger();
@@ -265,12 +338,27 @@ class FileUtilsDownloadTest {
 
         private DownloadHandler(byte[] data, boolean rangeSupported, boolean mismatchedPartContentRange, boolean failHeadRequest,
                                 int transientPartialFailureLimit, int transientPartialFailureBytes) {
+            this(data, rangeSupported, mismatchedPartContentRange, failHeadRequest, transientPartialFailureLimit,
+                    transientPartialFailureBytes, false);
+        }
+
+        private DownloadHandler(byte[] data, boolean rangeSupported, boolean mismatchedPartContentRange, boolean failHeadRequest,
+                                int transientPartialFailureLimit, int transientPartialFailureBytes, boolean stallPartialRequests) {
+            this(data, rangeSupported, mismatchedPartContentRange, failHeadRequest, transientPartialFailureLimit,
+                    transientPartialFailureBytes, stallPartialRequests, false);
+        }
+
+        private DownloadHandler(byte[] data, boolean rangeSupported, boolean mismatchedPartContentRange, boolean failHeadRequest,
+                                int transientPartialFailureLimit, int transientPartialFailureBytes, boolean stallPartialRequests,
+                                boolean failFirstRangeRequest) {
             this.data = data;
             this.rangeSupported = rangeSupported;
             this.mismatchedPartContentRange = mismatchedPartContentRange;
             this.failHeadRequest = failHeadRequest;
             this.transientPartialFailureLimit = transientPartialFailureLimit;
             this.transientPartialFailureBytes = transientPartialFailureBytes;
+            this.stallPartialRequests = stallPartialRequests;
+            this.failFirstRangeRequest = failFirstRangeRequest;
         }
 
         @Override
@@ -300,6 +388,13 @@ class FileUtilsDownloadTest {
             var start = Integer.parseInt(bounds[0]);
             var end = bounds[1].isEmpty() ? data.length - 1 : Integer.parseInt(bounds[1]);
             var length = end - start + 1;
+
+            if (failFirstRangeRequest && !(start == 0 && end == 0) && stalledRequests.incrementAndGet() == 1) {
+                exchange.sendResponseHeaders(500, -1);
+                exchange.close();
+                return;
+            }
+
             var responseStart = start;
             var responseEnd = end;
             if (mismatchedPartContentRange && !(start == 0 && end == 0)) {
@@ -310,6 +405,19 @@ class FileUtilsDownloadTest {
             exchange.getResponseHeaders().set("Content-Length", Integer.toString(length));
             exchange.getResponseHeaders().add("Content-Range", "bytes " + responseStart + "-" + responseEnd + "/" + data.length);
             exchange.sendResponseHeaders(206, length);
+
+            if (stallPartialRequests && !(start == 0 && end == 0)) {
+                var body = exchange.getResponseBody();
+                body.write(data, start, Math.min(length, STALL_AFTER_BYTES));
+                body.flush();
+                try {
+                    Thread.sleep(STALL_MILLIS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                exchange.close();
+                return;
+            }
 
             if (shouldFailTransiently(end)) {
                 exchange.getResponseBody().write(data, start, Math.min(length, transientPartialFailureBytes));
