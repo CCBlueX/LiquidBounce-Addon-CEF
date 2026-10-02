@@ -1,7 +1,14 @@
-package net.ccbluex.liquidbounce.cef
+package net.ccbluex.liquidbounce.cef.backend
 
 import net.ccbluex.liquidbounce.api.core.HttpClient
 import net.ccbluex.liquidbounce.api.interceptors.DefaultHeaderInterceptor
+import net.ccbluex.liquidbounce.cef.CefAccelerationSupport
+import net.ccbluex.liquidbounce.cef.CefRuntime
+import net.ccbluex.liquidbounce.cef.browser.CefBackedBrowser
+import net.ccbluex.liquidbounce.cef.download.CefNativesProgressForwarder
+import net.ccbluex.liquidbounce.cef.download.HashValidator
+import net.ccbluex.liquidbounce.cef.error.CefQuickFixes
+import net.ccbluex.liquidbounce.cef.error.JcefIsntCompatible
 import net.ccbluex.liquidbounce.config.ConfigSystem
 import net.ccbluex.liquidbounce.event.EventListener
 import net.ccbluex.liquidbounce.integration.backend.BrowserAccelerationFlags

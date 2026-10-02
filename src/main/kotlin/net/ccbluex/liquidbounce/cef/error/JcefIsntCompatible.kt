@@ -1,4 +1,4 @@
-package net.ccbluex.liquidbounce.cef
+package net.ccbluex.liquidbounce.cef.error
 
 import net.ccbluex.liquidbounce.utils.client.error.errors.ClientError
 

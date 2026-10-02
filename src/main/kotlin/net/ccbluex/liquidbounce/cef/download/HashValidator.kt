@@ -1,4 +1,4 @@
-package net.ccbluex.liquidbounce.cef
+package net.ccbluex.liquidbounce.cef.download
 
 import net.ccbluex.liquidbounce.LiquidBounce
 import net.ccbluex.liquidbounce.config.gson.util.readJson

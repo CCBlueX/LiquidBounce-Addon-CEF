@@ -1,7 +1,7 @@
 package net.ccbluex.liquidbounce.cef.gametest
 
 import com.mojang.blaze3d.platform.InputConstants
-import net.ccbluex.liquidbounce.cef.CefBrowserBackend
+import net.ccbluex.liquidbounce.cef.backend.CefBrowserBackend
 import net.ccbluex.liquidbounce.integration.backend.BrowserBackendManager
 import net.ccbluex.liquidbounce.integration.screen.CustomScreenType
 import net.ccbluex.liquidbounce.integration.screen.ScreenManager

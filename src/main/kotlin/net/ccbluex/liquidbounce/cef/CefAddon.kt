@@ -1,5 +1,7 @@
 package net.ccbluex.liquidbounce.cef
 
+import net.ccbluex.liquidbounce.cef.backend.CefBrowserBackend
+import net.ccbluex.liquidbounce.cef.error.CefQuickFixes
 import net.ccbluex.liquidbounce.features.addon.LiquidBounceAddon
 import net.ccbluex.liquidbounce.integration.backend.BrowserBackendProvider
 

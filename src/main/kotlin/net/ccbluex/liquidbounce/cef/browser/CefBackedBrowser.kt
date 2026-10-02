@@ -1,7 +1,7 @@
-package net.ccbluex.liquidbounce.cef
+package net.ccbluex.liquidbounce.cef.browser
 
-import net.ccbluex.liquidbounce.cef.browser.CefOffscreenBrowser
-import net.ccbluex.liquidbounce.cef.browser.CefOffscreenBrowserSettings
+import net.ccbluex.liquidbounce.cef.CefRuntime
+import net.ccbluex.liquidbounce.cef.backend.CefBrowserBackend
 import net.ccbluex.liquidbounce.features.module.MinecraftShortcuts
 import net.ccbluex.liquidbounce.integration.backend.BrowserTexture
 import net.ccbluex.liquidbounce.integration.backend.browser.Browser
