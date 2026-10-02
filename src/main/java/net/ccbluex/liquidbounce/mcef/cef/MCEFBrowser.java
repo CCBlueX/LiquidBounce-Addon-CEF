@@ -358,6 +358,22 @@ public class MCEFBrowser extends CefBrowserOsr {
     }
 
     private boolean handleClipboardShortcut(KeyEvent event) {
+        // CEF does not map the Cmd shortcuts on macOS
+        if (InputQuirks.REPLACE_CTRL_KEY_WITH_CMD_KEY) {
+            if (event.isCopy()) {
+                getFocusedFrame().copy();
+            } else if (event.isPaste()) {
+                getFocusedFrame().paste();
+            } else if (event.isCut()) {
+                getFocusedFrame().cut();
+            } else if (event.isSelectAll()) {
+                getFocusedFrame().selectAll();
+            } else {
+                return false;
+            }
+            return true;
+        }
+
         // Chromium runs on X11, and KWin only hands the Wayland clipboard to X11 clients while one of
         // their windows is focused. Copies go through SDL as well: reading Chromium's own selection back
         // would block this thread, which Chromium answers on, until SDL gives up after seconds.

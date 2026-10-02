@@ -1,6 +1,5 @@
 package net.ccbluex.liquidbounce.cef
 
-import com.mojang.blaze3d.platform.InputConstants
 import net.ccbluex.liquidbounce.features.module.MinecraftShortcuts
 import net.ccbluex.liquidbounce.integration.backend.BrowserTexture
 import net.ccbluex.liquidbounce.integration.backend.browser.Browser
@@ -17,7 +16,6 @@ import net.ccbluex.liquidbounce.mcef.cef.MCEFBrowser
 import net.ccbluex.liquidbounce.mcef.cef.MCEFBrowserSettings
 import org.apache.logging.log4j.LogManager
 import org.cef.browser.CefRequestContext
-import net.minecraft.client.input.InputQuirks
 import org.apache.logging.log4j.Logger
 import org.joml.component1
 import org.joml.component2
@@ -241,11 +239,6 @@ class CefBrowser(
 
     override fun keyPressed(keyCode: Int, scanCode: Int, modifiers: Int) {
         browserApi.setFocus(true)
-
-        if (InputQuirks.REPLACE_CTRL_KEY_WITH_CMD_KEY && handleMacClipboardShortcut(scanCode, modifiers)) {
-            return
-        }
-
         browserApi.sendKeyPress(scanCode, keyCode, modifiers)
     }
 
@@ -257,35 +250,6 @@ class CefBrowser(
     override fun charTyped(codepoint: Int) {
         browserApi.setFocus(true)
         browserApi.sendKeyTyped(codepoint)
-    }
-
-    // TODO: Temporary fix. Should be removed after fix in JCEF
-    private fun handleMacClipboardShortcut(scanCode: Int, modifiers: Int): Boolean {
-        val isCommandPressed = modifiers and InputConstants.MOD_SUPER != 0
-        if (!isCommandPressed) {
-            return false
-        }
-
-        val frame = browserApi.focusedFrame
-        return when (scanCode) {
-            InputConstants.KEY_C -> {
-                frame.copy()
-                true
-            }
-            InputConstants.KEY_V -> {
-                frame.paste()
-                true
-            }
-            InputConstants.KEY_X -> {
-                frame.cut()
-                true
-            }
-            InputConstants.KEY_A -> {
-                frame.selectAll()
-                true
-            }
-            else -> false
-        }
     }
 
     private fun comparePaintWithViewpoint(width: Int, height: Int) {
