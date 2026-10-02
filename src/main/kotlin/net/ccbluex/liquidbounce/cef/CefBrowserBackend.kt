@@ -15,13 +15,10 @@ import net.ccbluex.liquidbounce.mcef.MCEF
 import net.ccbluex.liquidbounce.mcef.MCEFAccelerationSupport
 import net.ccbluex.liquidbounce.utils.client.env
 import net.ccbluex.liquidbounce.utils.client.error.ErrorHandler
-import net.ccbluex.liquidbounce.utils.client.error.QuickFixes
-import net.ccbluex.liquidbounce.utils.client.error.errors.JcefIsntCompatible
 import net.ccbluex.liquidbounce.utils.client.logger
 import net.ccbluex.liquidbounce.utils.client.mc
 import net.ccbluex.liquidbounce.utils.kotlin.sortedInsert
 import net.ccbluex.liquidbounce.utils.text.formatAsCapacity
-import net.ccbluex.liquidbounce.utils.validation.HashValidator
 import org.cef.browser.CefFrame
 import org.cef.handler.CefLifeSpanHandlerAdapter
 import org.cef.handler.CefLoadHandler
@@ -97,7 +94,7 @@ class CefBrowserBackend : BrowserBackend, EventListener {
                     }.onFailure {
                         ErrorHandler.fatal(
                             error = it,
-                            quickFix = QuickFixes.DOWNLOAD_JCEF_FAILED,
+                            quickFix = CefQuickFixes.DOWNLOAD_JCEF_FAILED,
                             additionalMessage = "Downloading jcef"
                         )
                     }

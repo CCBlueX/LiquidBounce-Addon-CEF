@@ -9,6 +9,10 @@ import net.ccbluex.liquidbounce.integration.backend.BrowserBackendProvider
 class CefAddon : LiquidBounceAddon() {
 
     override fun onInitialize() {
+        registerQuickFix(CefQuickFixes.JCEF_ISNT_COMPATIBLE_WITH_THAT_SYSTEM)
+        registerQuickFix(CefQuickFixes.D3D11_UNSATISFIED_LINK)
+        registerQuickFix(CefQuickFixes.JCEF_UNSATISFIED_LINK)
+
         registerBrowserBackend(
             BrowserBackendProvider(
                 "cef",

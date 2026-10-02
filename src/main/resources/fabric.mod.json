@@ -19,6 +19,9 @@
       "net.ccbluex.liquidbounce.cef.CefAddon"
     ]
   },
+  "mixins": [
+    "liquidbounce-cef.mixins.json"
+  ],
   "accessWidener": "liquidbounce-cef.accesswidener",
   "depends": {
     "minecraft": "~${minecraft_version}",
