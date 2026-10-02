@@ -36,11 +36,20 @@ public final class EglUtils {
     private static @Nullable EGLCapabilities eglCapabilities = null;
     private static long eglDisplay = EGL14.EGL_NO_DISPLAY;
 
+    public static void load() {
+        try {
+            EGL.getCapabilities();
+        } catch (IllegalStateException ignored) {
+            EGL.create();
+        }
+    }
+
     public static long getDisplay() {
         if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
             return eglDisplay;
         }
 
+        load();
         long display = EGL14.eglGetCurrentDisplay();
         if (display == EGL14.EGL_NO_DISPLAY) {
             display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
@@ -60,12 +69,6 @@ public final class EglUtils {
         }
 
         eglDisplay = display;
-
-        try {
-            EGL.getCapabilities();
-        } catch (IllegalStateException ignored) {
-            EGL.create();
-        }
         eglCapabilities = EGL.createDisplayCapabilities(display);
 
         return eglDisplay;

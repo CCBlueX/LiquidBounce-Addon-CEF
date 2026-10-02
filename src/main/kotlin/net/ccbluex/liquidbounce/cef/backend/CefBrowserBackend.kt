@@ -188,11 +188,10 @@ class CefBrowserBackend : BrowserBackend, EventListener {
             })
         }
 
-        val support = CefAccelerationSupport.getAccelerationSupport()
-        accelerationFlags = if (support.isSupported) {
-            BrowserAccelerationFlags(isSupported = true, isBeta = support.isBeta)
-        } else {
-            BrowserAccelerationFlags.UNSUPPORTED
+        accelerationFlags = when (CefAccelerationSupport.getAccelerationSupport()) {
+            CefAccelerationSupport.Support.UNSUPPORTED -> BrowserAccelerationFlags.UNSUPPORTED
+            CefAccelerationSupport.Support.OPT_IN -> BrowserAccelerationFlags(isSupported = true, isBeta = true)
+            CefAccelerationSupport.Support.DEFAULT -> BrowserAccelerationFlags(isSupported = true, isBeta = false)
         }
     }
 
