@@ -6,6 +6,7 @@ import net.ccbluex.liquidbounce.cef.CefAccelerationSupport.Support
 import net.ccbluex.liquidbounce.config.types.list.Tagged
 import net.ccbluex.liquidbounce.event.EventListener
 import net.ccbluex.liquidbounce.event.events.KeyboardKeyEvent
+import net.ccbluex.liquidbounce.event.events.WindowTitleEvent
 import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.integration.backend.BrowserBackendManager
 import net.ccbluex.liquidbounce.integration.backend.browser.GlobalBrowserSettings
@@ -69,6 +70,18 @@ object AcceleratedPaint : EventListener {
 
         mode.set(if (isEnabled) Mode.OFF else Mode.ON)
         logger.info("Accelerated paint is now ${if (isEnabled) "on" else "off"}.")
+    }
+
+    @Suppress("unused")
+    private val titleHandler = handler<WindowTitleEvent> { event ->
+        if (!isActive || !isEnabled) {
+            return@handler
+        }
+
+        event.title.append(" | Accelerated Paint is ON")
+        if (!inGame) {
+            event.title.append(" [Hotkey: F12]")
+        }
     }
 
     enum class Mode(override val tag: String) : Tagged {

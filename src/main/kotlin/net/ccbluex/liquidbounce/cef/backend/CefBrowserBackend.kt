@@ -10,7 +10,6 @@ import net.ccbluex.liquidbounce.cef.error.CefQuickFixes
 import net.ccbluex.liquidbounce.cef.error.JcefIsntCompatible
 import net.ccbluex.liquidbounce.config.ConfigSystem
 import net.ccbluex.liquidbounce.event.EventListener
-import net.ccbluex.liquidbounce.integration.backend.BrowserAccelerationFlags
 import net.ccbluex.liquidbounce.integration.backend.BrowserBackend
 import net.ccbluex.liquidbounce.integration.backend.browser.BrowserSettings
 import net.ccbluex.liquidbounce.integration.backend.browser.BrowserState
@@ -57,7 +56,6 @@ class CefBrowserBackend : BrowserBackend, EventListener {
     override val isInitialized: Boolean
         get() = CefRuntime.INSTANCE.isInitialized
     override var browsers = mutableListOf<CefBackedBrowser>()
-    override var accelerationFlags = BrowserAccelerationFlags.UNSUPPORTED
 
     @Suppress("ThrowingExceptionsWithoutMessageOrCause")
     override fun makeDependenciesAvailable(taskManager: TaskManager, whenAvailable: () -> Unit) {
