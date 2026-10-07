@@ -1,0 +1,22 @@
+version: 2
+# Update jobs only reach the hosts declared here, the repositories in the Gradle build are not enough
+registries:
+  ccbluex-releases:
+    type: maven-repository
+    url: https://maven.ccbluex.net/releases
+  ccbluex-snapshots:
+    type: maven-repository
+    url: https://maven.ccbluex.net/snapshots
+  fabric:
+    type: maven-repository
+    url: https://maven.fabricmc.net
+updates:
+  - package-ecosystem: gradle
+    directory: "/"
+    registries: "*"
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
