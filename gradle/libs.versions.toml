@@ -13,7 +13,7 @@ fabric-kotlin = "1.14.1+kotlin.2.4.20"
 
 # The add-on compiles against the client itself; there is no separate API artifact.
 # Use `<version>+<mc>` for a release or `<version>+<mc>-SNAPSHOT` to track nextgen.
-liquidbounce = "0.40.1+26.3-SNAPSHOT"
+liquidbounce = "0.41.0+26.3"
 
 # The versions the client ships
 lwjgl = "3.4.3"
