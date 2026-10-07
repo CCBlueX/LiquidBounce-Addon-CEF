@@ -16,6 +16,15 @@ updates:
     registries: "*"
     schedule:
       interval: weekly
+    # These follow the LiquidBounce version the add-on targets, never ahead of it
+    ignore:
+      - dependency-name: net.fabricmc.fabric-loom
+      - dependency-name: net.fabricmc:fabric-loader
+      - dependency-name: net.fabricmc.fabric-api:fabric-api
+      - dependency-name: org.jetbrains.kotlin.jvm
+      - dependency-name: net.fabricmc:fabric-language-kotlin
+      - dependency-name: org.lwjgl:lwjgl-egl
+      - dependency-name: com.squareup.okhttp3:okhttp
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
