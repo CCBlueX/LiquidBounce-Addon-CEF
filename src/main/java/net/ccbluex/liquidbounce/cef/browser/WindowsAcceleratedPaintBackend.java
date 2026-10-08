@@ -18,14 +18,22 @@ import org.cef.handler.CefAcceleratedPaintInfoWin;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
+import java.util.concurrent.TimeUnit;
+
 import static org.lwjgl.opengl.EXTMemoryObject.*;
 import static org.lwjgl.opengl.EXTMemoryObjectWin32.GL_HANDLE_TYPE_D3D11_IMAGE_EXT;
 import static org.lwjgl.opengl.EXTMemoryObjectWin32.glImportMemoryWin32HandleEXT;
 import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL32C.GL_SYNC_FLUSH_COMMANDS_BIT;
+import static org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE;
+import static org.lwjgl.opengl.GL32C.glClientWaitSync;
+import static org.lwjgl.opengl.GL32C.glDeleteSync;
+import static org.lwjgl.opengl.GL32C.glFenceSync;
 
 @NullMarked
 final class WindowsAcceleratedPaintBackend implements AcceleratedPaintBackend {
     private static final long SHARED_TEXTURE_IMPORT_SIZE = 0L;
+    private static final long COPY_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(1);
 
     @Override
     public boolean accepts(CefAcceleratedPaintInfo info) {
@@ -40,19 +48,14 @@ final class WindowsAcceleratedPaintBackend implements AcceleratedPaintBackend {
             return null;
         }
 
-        var importedTexture = importSharedTexture(winInfo.shared_texture_handle, width, height);
-        if (importedTexture == null) {
-            return null;
-        }
-
-        return new AcceleratedPaintFrame(importedTexture.getTexture(), true, importedTexture::close);
+        return importSharedTexture(winInfo.shared_texture_handle, width, height);
     }
 
     @Override
     public void close() {
     }
 
-    private @Nullable CefDirectTexture importSharedTexture(long sharedTextureHandle, int width, int height) {
+    private @Nullable AcceleratedPaintFrame importSharedTexture(long sharedTextureHandle, int width, int height) {
         var sharedTextureId = glGenTextures();
 
         var memoryObject = glCreateMemoryObjectsEXT();
@@ -62,6 +65,8 @@ final class WindowsAcceleratedPaintBackend implements AcceleratedPaintBackend {
             return null;
         }
 
+        // A D3D11 texture is a dedicated allocation, which EXT_external_objects requires the import to say
+        glMemoryObjectParameteriEXT(memoryObject, GL_DEDICATED_MEMORY_OBJECT_EXT, GL_TRUE);
         glImportMemoryWin32HandleEXT(
                 memoryObject,
                 SHARED_TEXTURE_IMPORT_SIZE,
@@ -87,12 +92,12 @@ final class WindowsAcceleratedPaintBackend implements AcceleratedPaintBackend {
                 memoryObject,
                 0
         );
-        glDeleteMemoryObjectsEXT(memoryObject);
 
         error = glGetError();
         if (error != GL_NO_ERROR) {
             CefRuntime.INSTANCE.LOGGER.error("glTexStorageMem2DEXT failed with error: {}", error);
             glDeleteTextures(sharedTextureId);
+            glDeleteMemoryObjectsEXT(memoryObject);
             GlStateManager._bindTexture(0);
             return null;
         }
@@ -101,7 +106,16 @@ final class WindowsAcceleratedPaintBackend implements AcceleratedPaintBackend {
 
         var directTexture = new CefDirectTexture();
         directTexture.setOwnedDirectTextureId(sharedTextureId, width, height);
-        return directTexture;
+        return new AcceleratedPaintFrame(directTexture.getTexture(), true, () -> {
+            // Chromium draws into this texture again once the paint callback returns, and nothing orders that
+            // after our copy, so it has to be done by then (chromiumembedded/cef#3755). The memory object goes
+            // last: AMD's driver faults reading a texture whose memory object is already deleted.
+            var fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, COPY_TIMEOUT_NANOS);
+            glDeleteSync(fence);
+            directTexture.close();
+            glDeleteMemoryObjectsEXT(memoryObject);
+        });
     }
 
 }
