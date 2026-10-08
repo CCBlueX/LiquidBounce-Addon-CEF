@@ -93,6 +93,12 @@ public final class CefHelper {
                 // var ozonePlatform = System.getenv("WAYLAND_DISPLAY") != null ? "wayland" : "x11";
                 switches.add("--ozone-platform=" + ozonePlatform);
             }
+
+            // Chrome's memory log reads glibc's int-sized mallinfo(), which goes negative once the game's native heap
+            // passes 2 GiB, and Chromium then kills the process (chromiumembedded/cef#3963). Push its timer a year out.
+            if (switches.stream().noneMatch(s -> s.startsWith("--test-memory-log-delay-in-minutes"))) {
+                switches.add("--test-memory-log-delay-in-minutes=525600");
+            }
         }
 
         var cefSwitches = settings.getCefSwitches().toArray(new String[0]);
