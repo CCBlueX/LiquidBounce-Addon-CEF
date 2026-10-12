@@ -69,6 +69,10 @@ sourceSets {
         compileClasspath += sourceSets["jcef"].output
         runtimeClasspath += sourceSets["jcef"].output
     }
+    test {
+        compileClasspath += sourceSets["jcef"].output
+        runtimeClasspath += sourceSets["jcef"].output
+    }
     named("gametest") {
         runtimeClasspath += sourceSets["jcef"].output
     }

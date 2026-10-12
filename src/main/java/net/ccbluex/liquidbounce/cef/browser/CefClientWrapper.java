@@ -21,6 +21,7 @@
 
 package net.ccbluex.liquidbounce.cef.browser;
 
+import net.ccbluex.liquidbounce.cef.CefPlatform;
 import org.cef.CefClient;
 import org.cef.CefSettings;
 import org.cef.browser.CefBrowser;
@@ -52,6 +53,7 @@ public class CefClientWrapper implements CefLoadHandler, CefContextMenuHandler, 
         cefClient.addLoadHandler(this);
         cefClient.addContextMenuHandler(this);
         cefClient.addDisplayHandler(this);
+        cefClient.addKeyboardHandler(new CefKeyboardFallbackHandler(CefPlatform.getPlatform().isMacOS()));
 
         var clipboardRouter = CefMessageRouter.create(
                 new CefMessageRouter.CefMessageRouterConfig("cefClipboard", "cefClipboardCancel"));
