@@ -23,9 +23,9 @@ package net.ccbluex.liquidbounce.cef.utils;
 
 import com.google.common.base.Suppliers;
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream;
+import net.ccbluex.liquidbounce.api.core.OkHttpProgressInterceptor;
 import net.ccbluex.liquidbounce.cef.MultiPartDownloadConfig;
 import net.ccbluex.liquidbounce.cef.listeners.CefNativesProgressListener;
-import net.ccbluex.liquidbounce.cef.listeners.OkHttpProgressInterceptor;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
