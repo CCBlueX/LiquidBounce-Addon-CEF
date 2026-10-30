@@ -102,21 +102,12 @@ val generateJcefCommit = tasks.register("generateJcefCommit") {
 dependencies {
     minecraft(libs.minecraft)
 
-    implementation(libs.fabric.loader)
-    implementation(libs.fabric.api)
-    implementation(libs.fabric.kotlin)
-
     // The client itself; there is no separate API artifact. Clients that still came with MCEF must not bring it
     // in a second time.
     implementation(libs.liquidbounce) {
         exclude(group = "net.ccbluex", module = "mcef")
     }
 
-    // The client ships them
-    compileOnly(libs.lwjgl.egl)
-    compileOnly(libs.okhttp)
-
-    testImplementation(libs.okhttp)
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.launcher)
 }
@@ -126,13 +117,19 @@ configurations.all {
     resolutionStrategy.cacheChangingModulesFor(0, "seconds")
 }
 
+val clientVersions = configurations.compileClasspath.map { classpath ->
+    classpath.incoming.resolutionResult.allComponents
+        .mapNotNull { it.moduleVersion }
+        .associate { "${it.group}:${it.name}" to it.version }
+}
+
 tasks.processResources {
     val modVersion = providers.gradleProperty("mod_version").zip(libs.versions.minecraft) { version, minecraft ->
         "$version+$minecraft"
     }
     val minecraftVersion = libs.versions.minecraft
-    val loaderVersion = libs.versions.fabric.loader
-    val fabricKotlinVersion = libs.versions.fabric.kotlin
+    val loaderVersion = clientVersions.map { it.getValue("net.fabricmc:fabric-loader") }
+    val fabricKotlinVersion = clientVersions.map { it.getValue("net.fabricmc:fabric-language-kotlin") }
 
     inputs.property("version", modVersion)
     inputs.property("minecraft_version", minecraftVersion)
