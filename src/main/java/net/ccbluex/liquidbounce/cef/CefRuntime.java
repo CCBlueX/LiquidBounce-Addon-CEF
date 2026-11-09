@@ -47,6 +47,7 @@ public enum CefRuntime {
     private @Nullable CefAppWrapper app;
     private @Nullable CefClientWrapper client;
     private @Nullable CefNativesManager resourceManager;
+    private @Nullable ChromiumLog chromiumLog;
     
     public Logger getLogger() {
         return LOGGER;
@@ -72,6 +73,13 @@ public enum CefRuntime {
 
     public boolean initialize() {
         LOGGER.info("Initializing CEF on " + CefPlatform.getPlatform().getNormalizedName() + "...");
+
+        var logFile = getSettings().getLogFile();
+        if (logFile != null && chromiumLog == null) {
+            // Chromium appends to it
+            logFile.delete();
+            chromiumLog = ChromiumLog.start(logFile);
+        }
 
         if (CefHelper.init()) {
             app = new CefAppWrapper(CefHelper.getCefApp());
@@ -194,6 +202,11 @@ public enum CefRuntime {
             CefHelper.shutdown();
             client = null;
             app = null;
+        }
+
+        if (chromiumLog != null) {
+            chromiumLog.stop();
+            chromiumLog = null;
         }
     }
 

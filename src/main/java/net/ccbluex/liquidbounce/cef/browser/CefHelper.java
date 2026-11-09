@@ -113,6 +113,13 @@ public final class CefHelper {
         }
 
         System.setProperty("jcef.path", platformDirectory.getAbsolutePath());
+        var logger = CefRuntime.INSTANCE.getLogger();
+        logger.info("CEF switches: {}", String.join(" ", cefSwitches));
+        if (platform.isLinux()) {
+            // Chromium runs on X11 (see --ozone-platform), which a Wayland session only offers through XWayland
+            logger.info("Display: DISPLAY={}, WAYLAND_DISPLAY={}, XDG_SESSION_TYPE={}",
+                    System.getenv("DISPLAY"), System.getenv("WAYLAND_DISPLAY"), System.getenv("XDG_SESSION_TYPE"));
+        }
         if (!CefApp.startup(cefSwitches)) {
             return false;
         }
@@ -121,6 +128,11 @@ public final class CefHelper {
         cefSettings.windowless_rendering_enabled = true;
         cefSettings.background_color = cefSettings.new ColorType(0, 255, 255, 255);
         cefSettings.cache_path = settings.getCacheDirectory() != null ? settings.getCacheDirectory().getAbsolutePath() : null;
+        var logFile = settings.getLogFile();
+        if (logFile != null) {
+            cefSettings.log_file = logFile.getAbsolutePath();
+            cefSettings.log_severity = CefSettings.LogSeverity.LOGSEVERITY_WARNING;
+        }
         // Set the user agent if there's one defined in CefRuntimeSettings
         if (settings.getUserAgent() != null) {
             cefSettings.user_agent = settings.getUserAgent();
