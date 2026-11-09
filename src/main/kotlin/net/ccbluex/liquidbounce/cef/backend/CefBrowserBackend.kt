@@ -27,6 +27,8 @@ import org.cef.browser.CefFrame
 import org.cef.handler.CefLifeSpanHandlerAdapter
 import org.cef.handler.CefLoadHandler
 import org.cef.handler.CefLoadHandlerAdapter
+import org.cef.handler.CefRequestHandler
+import org.cef.handler.CefRequestHandlerAdapter
 import org.cef.network.CefRequest
 import java.io.File
 
@@ -73,6 +75,7 @@ class CefBrowserBackend : BrowserBackend, EventListener {
                     deleteOnExit()
                 }
                 librariesDirectory = librariesFolder
+                logFile = cefFolder.resolve("chromium.log")
 
                 // CEF Switches
                 appendCefSwitches("--no-proxy-server")
@@ -149,6 +152,20 @@ class CefBrowserBackend : BrowserBackend, EventListener {
                 override fun onAfterCreated(cefBrowser: CefBrowser) {
                     markInitialized(cefBrowser)
                     super.onAfterCreated(cefBrowser)
+                }
+            })
+
+            CefRuntime.INSTANCE.client.handle.addRequestHandler(object : CefRequestHandlerAdapter() {
+                override fun onRenderProcessTerminated(
+                    cefBrowser: CefBrowser,
+                    status: CefRequestHandler.TerminationStatus,
+                    errorCode: Int,
+                    errorString: String?
+                ) {
+                    logger.error(
+                        "The render process of ${getBrowserByApi(cefBrowser) ?: cefBrowser} ended: " +
+                            "$status (code $errorCode, $errorString)"
+                    )
                 }
             })
 

@@ -51,6 +51,7 @@ public class CefRuntimeSettings {
     ));
     private File cacheDirectory = null;
     private File librariesDirectory = null;
+    private @Nullable File logFile = null;
 
     private MultiPartDownloadConfig multiPartDownloadConfig = MultiPartDownloadConfig.DEFAULT;
     private @Nullable OkHttpClient okHttpClient = null;
@@ -109,6 +110,17 @@ public class CefRuntimeSettings {
 
     public void setLibrariesDirectory(File librariesDirectory) {
         this.librariesDirectory = librariesDirectory;
+    }
+
+    /**
+     * Where Chromium and its helper processes log to. Its warnings and errors are copied into the game log.
+     */
+    public @Nullable File getLogFile() {
+        return logFile;
+    }
+
+    public void setLogFile(@Nullable File logFile) {
+        this.logFile = logFile;
     }
 
     public MultiPartDownloadConfig getMultiPartDownloadConfig() {
