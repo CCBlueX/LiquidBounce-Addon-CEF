@@ -41,7 +41,7 @@ import static net.ccbluex.liquidbounce.cef.utils.FileUtils.extractTarGz;
  * <p>
  * Downloads for <a href="https://github.com/CCBlueX/java-cef">CCBlueX java-cef</a> are provided by CCBlueX unless changed
  * in the CefRuntimeSettings properties file; see {@link CefRuntimeSettings}.
- * Email support@liquidbounce.net for any questions or concerns regarding the file hosting.
+ * Questions or concerns regarding the file hosting: https://ccbluex.net/contact
  */
 public class CefNativesManager {
 
