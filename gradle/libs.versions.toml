@@ -9,7 +9,7 @@ fabric-loom = "1.19-SNAPSHOT"
 kotlin = "2.4.20"
 
 # The add-on compiles against the client itself; there is no separate API artifact.
-# Use `<version>+<mc>` for a release or `<version>+<mc>-SNAPSHOT` to track nextgen.
+# Use `<version>+<mc>` for a release or `<version>+<mc>-SNAPSHOT` to track main.
 liquidbounce = "0.42.0+26.3"
 
 junit = "6.1.2"
